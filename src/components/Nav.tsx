@@ -14,8 +14,11 @@ const ALL_ITEMS: NavItem[] = [
   { href: "/finanzas", label: "Finanzas", icon: "💰", mod: "finanzas" },
   { href: "/documentos", label: "Documentos", icon: "📄", mod: "documentos" },
   { href: "/alertas", label: "Alertas", icon: "🔔" },
+  { href: "/buscar", label: "Búsqueda", icon: "🔍" },
+  { href: "/reportes", label: "Reportes", icon: "📊" },
   { href: "/ia", label: "Asistente IA", icon: "✨" },
   { href: "/auditoria", label: "Auditoría", icon: "🔎", mod: "auditoria" },
+  { href: "/configuracion", label: "Configuración", icon: "⚙️" },
 ];
 
 function itemsFor(user: SessionUser) {
@@ -29,7 +32,7 @@ export function Sidebar({ user }: { user: SessionUser }) {
       <div className="px-5 py-5 flex items-center gap-2 border-b border-white/10">
         <img src="/icon.svg" alt="" className="h-8 w-8" />
         <div>
-          <div className="text-sm font-bold leading-tight">Cooperativa</div>
+          <div className="text-sm font-bold leading-tight">UFAMA</div>
           <div className="text-[11px] text-white/60 leading-tight">Sistema de gestión</div>
         </div>
       </div>
@@ -57,7 +60,7 @@ export function TopBar({ user }: { user: SessionUser }) {
     <header className="md:hidden sticky top-0 z-20 bg-[#123240] text-white px-4 py-3 flex items-center justify-between">
       <div className="flex items-center gap-2">
         <img src="/icon.svg" alt="" className="h-6 w-6" />
-        <span className="text-sm font-bold">Cooperativa</span>
+        <span className="text-sm font-bold">UFAMA</span>
       </div>
       <div className="text-right leading-tight">
         <div className="text-xs">{user.nombre.split(" ")[0]}</div>

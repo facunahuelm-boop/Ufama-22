@@ -259,3 +259,32 @@ CREATE TABLE IF NOT EXISTS auditoria (
   valor_nuevo TEXT,
   fecha TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- ===================== REPORTES =====================
+CREATE TABLE IF NOT EXISTS reportes_generados (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  nombre_reporte TEXT NOT NULL,
+  tipo TEXT NOT NULL, -- obra | finanzas | trabajo | compras | seguridad
+  formato TEXT NOT NULL, -- pdf | xlsx | json
+  contenido_json TEXT,
+  archivo_url TEXT,
+  creado_por_id INTEGER REFERENCES users(id),
+  creado_en TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- ===================== CONFIGURACIÓN DE EMAIL =====================
+CREATE TABLE IF NOT EXISTS config_email (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  clave TEXT NOT NULL UNIQUE,
+  valor TEXT,
+  actualizado_en TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS alertas_email (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  usuario_id INTEGER REFERENCES users(id),
+  rol TEXT NOT NULL,
+  tipo_alerta TEXT NOT NULL, -- tarea_atrasada | documento_vencido | dinero_bajo | problema_critico
+  habilitada INTEGER NOT NULL DEFAULT 1,
+  creada_en TEXT NOT NULL DEFAULT (datetime('now'))
+);

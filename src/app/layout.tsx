@@ -2,8 +2,8 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Cooperativa | Sistema de gestión",
-  description: "Sistema operativo digital de la cooperativa de vivienda por ayuda mutua",
+  title: "UFAMA | Sistema de gestión",
+  description: "Sistema operativo digital UFAMA - cooperativa de vivienda por ayuda mutua",
   manifest: "/manifest.webmanifest",
   icons: {
     icon: "/icon.svg",
