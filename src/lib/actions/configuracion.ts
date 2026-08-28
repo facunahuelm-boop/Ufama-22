@@ -3,77 +3,76 @@
 import { getCurrentUser } from "@/lib/auth";
 import { all, insert, update } from "@/lib/db";
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 
 export async function guardarConfigEmailAction(formData: FormData) {
-  const user = await getCurrentUser();
-  if (!user || !["admin", "consejo_directivo"].includes(user.rol)) {
-    redirect("/login");
-  }
+    const user = await getCurrentUser();
+    if (!user || !["admin", "consejo_directivo"].includes(user.rol)) {
+          redirect("/login");
+    }
 
   const campos = [
-    "smtp_host",
-    "smtp_port",
-    "smtp_user",
-    "smtp_password",
-    "email_remitente",
-    "email_alertas_criticas",
-  ];
+        "smtp_host",
+        "smtp_port",
+        "smtp_user",
+        "smtp_password",
+        "email_remitente",
+        "email_alertas_criticas",
+      ];
 
   for (const campo of campos) {
-    const valor = formData.get(campo) as string;
-    const existe = all<any>(
-      `SELECT id FROM config_email WHERE clave = ?`,
-      [campo]
-    )[0];
+        const valor = formData.get(campo) as string;
+        const existe = (
+                await all<any>(`SELECT id FROM config_email WHERE clave = ?`, [campo])
+              )[0];
 
-    if (existe) {
-      update("config_email", existe.id, {
-        valor,
-        actualizado_en: new Date().toISOString(),
-      });
-    } else {
-      insert("config_email", {
-        clave: campo,
-        valor,
-      });
-    }
+      if (existe) {
+              await update("config_email", existe.id, {
+                        valor,
+                        actualizado_en: new Date().toISOString(),
+              });
+      } else {
+              await insert("config_email", {
+                        clave: campo,
+                        valor,
+              });
+      }
   }
 
-  return { success: true };
+  revalidatePath("/configuracion");
 }
 
 export async function actualizarAlertasEmailAction(formData: FormData) {
-  const user = await getCurrentUser();
-  if (!user || !["admin", "consejo_directivo"].includes(user.rol)) {
-    redirect("/login");
-  }
+    const user = await getCurrentUser();
+    if (!user || !["admin", "consejo_directivo"].includes(user.rol)) {
+          redirect("/login");
+    }
 
   const tiposAlerta = [
-    "tarea_atrasada",
-    "documento_vencido",
-    "dinero_bajo",
-    "problema_critico",
-  ];
+        "tarea_atrasada",
+        "documento_vencido",
+        "dinero_bajo",
+        "problema_critico",
+      ];
 
   for (const tipo of tiposAlerta) {
-    const habilitada = formData.get(tipo) ? 1 : 0;
-    const existe = all<any>(
-      `SELECT id FROM alertas_email WHERE tipo_alerta = ?`,
-      [tipo]
-    )[0];
+        const habilitada = formData.get(tipo) ? 1 : 0;
+        const existe = (
+                await all<any>(`SELECT id FROM alertas_email WHERE tipo_alerta = ?`, [tipo])
+              )[0];
 
-    if (existe) {
-      update("alertas_email", existe.id, {
-        habilitada,
-      });
-    } else {
-      insert("alertas_email", {
-        tipo_alerta: tipo,
-        rol: "admin",
-        habilitada,
-      });
-    }
+      if (existe) {
+              await update("alertas_email", existe.id, {
+                        habilitada,
+              });
+      } else {
+              await insert("alertas_email", {
+                        tipo_alerta: tipo,
+                        rol: "admin",
+                        habilitada,
+              });
+      }
   }
 
-  return { success: true };
+  revalidatePath("/configuracion");
 }
