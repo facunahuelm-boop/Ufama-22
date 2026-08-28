@@ -6,8 +6,8 @@ export const metadata: Metadata = {
   description: "Sistema operativo digital UFAMA - cooperativa de vivienda por ayuda mutua",
   manifest: "/manifest.webmanifest",
   icons: {
-    icon: "/icon.svg",
-    apple: "/icon.svg",
+    icon: "/logo-ufama.png",
+    apple: "/logo-ufama.png",
   },
 };
 

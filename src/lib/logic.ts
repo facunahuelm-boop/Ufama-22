@@ -1,5 +1,21 @@
 import dayjs from "dayjs";
 import { all, get, upsertAlerta, insert } from "./db";
+import { enviarEmailAlerta } from "./email";
+
+// Crea o actualiza una alerta y, si es realmente nueva (no existía ya abierta),
+// dispara el email a la casilla configurada en Configuración (si hay una cargada).
+async function crearAlerta(params: Parameters<typeof upsertAlerta>[0]) {
+  const { esNueva } = await upsertAlerta(params);
+  if (esNueva) {
+    await enviarEmailAlerta({
+      tipo: params.tipo,
+      severidad: params.severidad,
+      titulo: params.titulo,
+      descripcion: params.descripcion,
+      origen_modulo: params.origen_modulo,
+    });
+  }
+}
 
 // ============ SEMÁFORO DE OBRA ============
 export type Semaforo = "verde" | "amarillo" | "rojo";
@@ -83,7 +99,7 @@ export async function recalcularAlertas() {
   for (const d of docs) {
     const dias = dayjs(d.fecha_vencimiento).diff(hoy, "day");
     if (dias < 0) {
-      await upsertAlerta({
+      await crearAlerta({
         tipo: "documento_vencido",
         severidad: "critica",
         origen_modulo: "seguridad",
@@ -94,7 +110,7 @@ export async function recalcularAlertas() {
         ref_id: d.id,
       });
     } else if (dias <= 15) {
-      await upsertAlerta({
+      await crearAlerta({
         tipo: "documento_por_vencer",
         severidad: "importante",
         origen_modulo: "seguridad",
@@ -112,7 +128,7 @@ export async function recalcularAlertas() {
     `SELECT * FROM incidentes_seguridad WHERE estado != 'resuelto' AND severidad = 'critica'`
   );
   for (const i of incidentesCriticos) {
-    await upsertAlerta({
+    await crearAlerta({
       tipo: "riesgo_critico",
       severidad: "critica",
       origen_modulo: "seguridad",
@@ -129,7 +145,7 @@ export async function recalcularAlertas() {
   for (const t of tareas as any[]) {
     if (t.semaforo === "rojo" && t.estado !== "completada") {
       const dias = t.fecha_fin_prevista ? -dayjs(t.fecha_fin_prevista).diff(dayjs(), "day") : null;
-      await upsertAlerta({
+      await crearAlerta({
         tipo: "tarea_atrasada",
         severidad: t.prioridad === "critica" ? "critica" : "importante",
         origen_modulo: "obra",
@@ -145,7 +161,7 @@ export async function recalcularAlertas() {
   // Problemas de obra críticos abiertos
   const problemas = await all<any>(`SELECT * FROM problemas_obra WHERE estado='abierto' AND severidad='critica'`);
   for (const p of problemas) {
-    await upsertAlerta({
+    await crearAlerta({
       tipo: "problema_critico",
       severidad: "critica",
       origen_modulo: "obra",
@@ -163,7 +179,7 @@ export async function recalcularAlertas() {
   );
   for (const s of solicitudes) {
     if (s.prioridad === "critica" || s.prioridad === "alta") {
-      await upsertAlerta({
+      await crearAlerta({
         tipo: "compra_pendiente_critica",
         severidad: s.prioridad === "critica" ? "critica" : "importante",
         origen_modulo: "compras",
@@ -179,7 +195,7 @@ export async function recalcularAlertas() {
   // Finanzas: disponible prudencial bajo o negativo
   const fin = await resumenFinanciero();
   if (fin.disponiblePrudencial < 0) {
-    await upsertAlerta({
+    await crearAlerta({
       tipo: "disponible_negativo",
       severidad: "critica",
       origen_modulo: "finanzas",
@@ -189,7 +205,7 @@ export async function recalcularAlertas() {
       ref_tabla: "movimientos_financieros",
     });
   } else if (fin.disponiblePrudencial < fin.gastosProyectados) {
-    await upsertAlerta({
+    await crearAlerta({
       tipo: "disponible_bajo",
       severidad: "importante",
       origen_modulo: "finanzas",
@@ -205,7 +221,7 @@ export async function recalcularAlertas() {
     if (p.monto_presupuestado > 0) {
       const desv = (p.gastado - p.monto_presupuestado) / p.monto_presupuestado;
       if (desv > 0.15) {
-        await upsertAlerta({
+        await crearAlerta({
           tipo: "desvio_presupuesto",
           severidad: desv > 0.3 ? "critica" : "importante",
           origen_modulo: "finanzas",
@@ -231,7 +247,7 @@ export async function recalcularAlertas() {
       );
       const asignados = asignadosRow?.n ?? 0;
       if (asignados < tj.personas_necesarias) {
-        await upsertAlerta({
+        await crearAlerta({
           tipo: "tarea_jornada_sin_cubrir",
           severidad: "importante",
           origen_modulo: "trabajo",

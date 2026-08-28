@@ -132,7 +132,7 @@ type UpsertAlertaParams = {
   ref_id?: number | null;
 };
 
-export async function upsertAlerta(params: UpsertAlertaParams): Promise<void> {
+export async function upsertAlerta(params: UpsertAlertaParams): Promise<{ id: number; esNueva: boolean }> {
   const refTabla = params.ref_tabla ?? null;
   const refId = params.ref_id ?? null;
   const existente = await get<{ id: number }>(
@@ -149,8 +149,9 @@ export async function upsertAlerta(params: UpsertAlertaParams): Promise<void> {
       descripcion: params.descripcion ?? null,
       asignado_a_rol: params.asignado_a_rol ?? null,
     });
+    return { id: existente.id, esNueva: false };
   } else {
-    await insert("alertas", {
+    const id = await insert("alertas", {
       tipo: params.tipo,
       severidad: params.severidad,
       origen_modulo: params.origen_modulo,
@@ -161,5 +162,6 @@ export async function upsertAlerta(params: UpsertAlertaParams): Promise<void> {
       ref_tabla: refTabla,
       ref_id: refId,
     });
+    return { id, esNueva: true };
   }
 }

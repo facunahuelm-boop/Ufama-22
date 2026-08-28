@@ -1,8 +1,10 @@
 import { getCurrentUser } from "@/lib/auth";
 import { all, get } from "@/lib/db";
 import { tareasObraConSemaforo, resumenFinanciero, recalcularAlertas } from "@/lib/logic";
-import { canRead, ROLES_FINANZAS_DETALLE } from "@/lib/roles";
+import { canRead, canEdit, ROLES_FINANZAS_DETALLE } from "@/lib/roles";
 import { Card, SectionTitle, Badge, StatTile, EmptyState, PageHeader, Button } from "@/components/ui";
+import { Saludo } from "@/components/Saludo";
+import { InstallHint } from "@/components/InstallHint";
 import dayjs from "dayjs";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -88,9 +90,47 @@ export default async function DashboardPage() {
   const importantes = alertas.filter((a) => a.severidad === "importante");
   const informativas = alertas.filter((a) => a.severidad === "informativa");
 
+  // Accesos rápidos: solo se muestran las acciones que el rol del usuario puede editar.
+  const accesos: { label: string; href: string; icon: string }[] = [];
+  if (canEdit(user.rol, "obra")) accesos.push({ label: "Registrar avance de obra", href: "/obra", icon: "🏗️" });
+  if (canEdit(user.rol, "trabajo")) accesos.push({ label: "Gestionar jornada de trabajo", href: "/trabajo", icon: "🤝" });
+  if (canEdit(user.rol, "compras")) accesos.push({ label: "Nueva solicitud de compra", href: "/compras", icon: "🛒" });
+  if (canEdit(user.rol, "seguridad")) accesos.push({ label: "Cargar inspección o incidente", href: "/seguridad", icon: "🦺" });
+  if (canEdit(user.rol, "finanzas")) accesos.push({ label: "Registrar movimiento", href: "/finanzas", icon: "💰" });
+  if (canEdit(user.rol, "documentos")) accesos.push({ label: "Subir documento", href: "/documentos", icon: "📄" });
+
   return (
     <div>
-      <PageHeader title={`Hola, ${user.nombre.split(" ")[0]}`} subtitle={dayjs().format("dddd DD [de] MMMM, YYYY")} />
+      <InstallHint />
+
+      <PageHeader
+        title={<Saludo nombre={user.nombre.split(" ")[0]} />}
+        subtitle={dayjs().format("dddd DD [de] MMMM, YYYY")}
+      />
+
+      {criticas.length > 0 && (
+        <Link
+          href="/alertas"
+          className="block mb-4 rounded-xl bg-[var(--color-rojo-bg)] border border-[var(--color-rojo)]/20 px-4 py-3 text-sm font-medium text-[var(--color-rojo)] hover:opacity-90"
+        >
+          🔴 Tenés {criticas.length} alerta{criticas.length === 1 ? "" : "s"} crítica{criticas.length === 1 ? "" : "s"} sin resolver — tocá para verla{criticas.length === 1 ? "" : "s"}
+        </Link>
+      )}
+
+      {accesos.length > 0 && (
+        <div className="flex gap-2 overflow-x-auto pb-1 mb-5 -mx-1 px-1">
+          {accesos.map((a) => (
+            <Link
+              key={a.href}
+              href={a.href}
+              className="shrink-0 inline-flex items-center gap-2 rounded-xl bg-white border border-black/5 shadow-sm px-3.5 py-2.5 text-xs font-semibold text-[#123240] hover:bg-[#e7eff1] whitespace-nowrap"
+            >
+              <span>{a.icon}</span>
+              {a.label}
+            </Link>
+          ))}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {canRead(user.rol, "obra") && (

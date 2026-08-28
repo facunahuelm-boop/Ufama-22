@@ -18,7 +18,7 @@ export function SectionTitle({ children, action }: { children: ReactNode; action
   );
 }
 
-export function PageHeader({ title, subtitle, action }: { title: string; subtitle?: string; action?: ReactNode }) {
+export function PageHeader({ title, subtitle, action }: { title: ReactNode; subtitle?: string; action?: ReactNode }) {
   return (
     <div className="flex items-start justify-between gap-3 mb-5">
       <div>

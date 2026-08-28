@@ -14,6 +14,14 @@ const nextConfig: NextConfig = {
   experimental: {
     memoryBasedWorkersCount: true,
   },
+
+  // pdfkit carga sus métricas de fuente (.afm) en tiempo de ejecución con una
+  // ruta relativa a __dirname, que el rastreador de archivos de Vercel no
+  // detecta solo — sin esto, el reporte en PDF fallaría en producción aunque
+  // funcione en desarrollo local.
+  outputFileTracingIncludes: {
+    "/api/reportes/finanzas": ["./node_modules/pdfkit/js/data/**"],
+  },
 };
 
 export default nextConfig;

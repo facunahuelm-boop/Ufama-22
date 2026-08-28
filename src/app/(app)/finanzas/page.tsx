@@ -26,7 +26,20 @@ export default async function FinanzasPage() {
 
   return (
     <div>
-      <PageHeader title="Finanzas" subtitle="Ingresos, egresos, presupuesto y disponible" />
+      <PageHeader
+        title="Finanzas"
+        subtitle="Ingresos, egresos, presupuesto y disponible"
+        action={
+          detalle ? (
+            <a
+              href="/api/reportes/finanzas"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#1f4e5f] text-white hover:bg-[#123240] px-4 py-2.5 text-sm font-semibold transition-colors whitespace-nowrap"
+            >
+              📄 Descargar reporte PDF
+            </a>
+          ) : undefined
+        }
+      />
 
       {!detalle ? (
         <Card><EmptyState>Tu rol ve un resumen general de finanzas. Los montos detallados y movimientos los administra Tesorería y Administración.</EmptyState></Card>
