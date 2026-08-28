@@ -13,52 +13,77 @@ export default async function DashboardPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  recalcularAlertas();
+  await recalcularAlertas();
 
-  const tareas = canRead(user.rol, "obra") ? tareasObraConSemaforo() : [];
+  const verFinanzasDetalle = ROLES_FINANZAS_DETALLE.includes(user.rol);
+
+  const [
+    tareas,
+    problemasAbiertosRow,
+    proximaJornada,
+    comprasPendientesRow,
+    comparacionesListasRow,
+    entregasPendientesRow,
+    docsVencidosRow,
+    docsPorVencerRow,
+    riesgosAbiertosRow,
+    fin,
+    proximosPagos,
+    alertas,
+  ] = await Promise.all([
+    canRead(user.rol, "obra") ? tareasObraConSemaforo() : Promise.resolve([] as any[]),
+    canRead(user.rol, "obra")
+      ? get<{ n: number }>(`SELECT COUNT(*) as n FROM problemas_obra WHERE estado='abierto'`)
+      : Promise.resolve(undefined),
+    canRead(user.rol, "trabajo")
+      ? get<any>(`SELECT * FROM jornadas_trabajo WHERE fecha >= CURRENT_DATE::text ORDER BY fecha ASC LIMIT 1`)
+      : Promise.resolve(null),
+    canRead(user.rol, "compras")
+      ? get<{ n: number }>(`SELECT COUNT(*) as n FROM solicitudes_compra WHERE estado IN ('pendiente_cotizacion','en_comparacion')`)
+      : Promise.resolve(undefined),
+    canRead(user.rol, "compras")
+      ? get<{ n: number }>(`SELECT COUNT(DISTINCT solicitud_id) as n FROM presupuestos_proveedor pp JOIN solicitudes_compra sc ON sc.id = pp.solicitud_id WHERE sc.estado='en_comparacion'`)
+      : Promise.resolve(undefined),
+    canRead(user.rol, "compras")
+      ? get<{ n: number }>(`SELECT COUNT(*) as n FROM solicitudes_compra WHERE estado='aprobada'`)
+      : Promise.resolve(undefined),
+    canRead(user.rol, "seguridad")
+      ? get<{ n: number }>(`SELECT COUNT(*) as n FROM documentos_seguridad WHERE fecha_vencimiento < CURRENT_DATE::text`)
+      : Promise.resolve(undefined),
+    canRead(user.rol, "seguridad")
+      ? get<{ n: number }>(`SELECT COUNT(*) as n FROM documentos_seguridad WHERE fecha_vencimiento >= CURRENT_DATE::text AND fecha_vencimiento <= (CURRENT_DATE + 15)::text`)
+      : Promise.resolve(undefined),
+    canRead(user.rol, "seguridad")
+      ? get<{ n: number }>(`SELECT COUNT(*) as n FROM incidentes_seguridad WHERE estado != 'resuelto'`)
+      : Promise.resolve(undefined),
+    canRead(user.rol, "finanzas") ? resumenFinanciero() : Promise.resolve(null),
+    verFinanzasDetalle ? all<any>(`SELECT * FROM compromisos_futuros ORDER BY fecha_estimada ASC LIMIT 3`) : Promise.resolve([] as any[]),
+    all<any>(`SELECT * FROM alertas WHERE estado='abierta' ORDER BY CASE severidad WHEN 'critica' THEN 0 WHEN 'importante' THEN 1 ELSE 2 END, fecha DESC`),
+  ]);
+
   const totalTareas = tareas.length;
   const completadas = tareas.filter((t: any) => t.estado === "completada").length;
   const pctAvance = totalTareas ? Math.round((completadas / totalTareas) * 100) : 0;
   const atrasadas = tareas.filter((t: any) => t.semaforo === "rojo" && t.estado !== "completada");
-  const problemasAbiertos = canRead(user.rol, "obra")
-    ? get<{ n: number }>(`SELECT COUNT(*) as n FROM problemas_obra WHERE estado='abierto'`)?.n ?? 0
-    : 0;
+  const problemasAbiertos = problemasAbiertosRow?.n ?? 0;
 
-  const proximaJornada = canRead(user.rol, "trabajo")
-    ? get<any>(`SELECT * FROM jornadas_trabajo WHERE fecha >= date('now') ORDER BY fecha ASC LIMIT 1`)
-    : null;
-  const personasAsignadas = proximaJornada
-    ? get<{ n: number }>(`SELECT COUNT(*) as n FROM asignaciones_jornada WHERE jornada_id = ?`, [proximaJornada.id])?.n ?? 0
-    : 0;
-  const tareasJornadaPendientes = proximaJornada
-    ? get<{ n: number }>(`SELECT COUNT(*) as n FROM tareas_jornada WHERE jornada_id = ?`, [proximaJornada.id])?.n ?? 0
-    : 0;
+  const [personasAsignadasRow, tareasJornadaPendientesRow] = proximaJornada
+    ? await Promise.all([
+        get<{ n: number }>(`SELECT COUNT(*) as n FROM asignaciones_jornada WHERE jornada_id = ?`, [proximaJornada.id]),
+        get<{ n: number }>(`SELECT COUNT(*) as n FROM tareas_jornada WHERE jornada_id = ?`, [proximaJornada.id]),
+      ])
+    : [undefined, undefined];
+  const personasAsignadas = personasAsignadasRow?.n ?? 0;
+  const tareasJornadaPendientes = tareasJornadaPendientesRow?.n ?? 0;
 
-  const comprasPendientes = canRead(user.rol, "compras")
-    ? get<{ n: number }>(`SELECT COUNT(*) as n FROM solicitudes_compra WHERE estado IN ('pendiente_cotizacion','en_comparacion')`)?.n ?? 0
-    : 0;
-  const comparacionesListas = canRead(user.rol, "compras")
-    ? get<{ n: number }>(`SELECT COUNT(DISTINCT solicitud_id) as n FROM presupuestos_proveedor pp JOIN solicitudes_compra sc ON sc.id = pp.solicitud_id WHERE sc.estado='en_comparacion'`)?.n ?? 0
-    : 0;
-  const entregasPendientes = canRead(user.rol, "compras")
-    ? get<{ n: number }>(`SELECT COUNT(*) as n FROM solicitudes_compra WHERE estado='aprobada'`)?.n ?? 0
-    : 0;
+  const comprasPendientes = comprasPendientesRow?.n ?? 0;
+  const comparacionesListas = comparacionesListasRow?.n ?? 0;
+  const entregasPendientes = entregasPendientesRow?.n ?? 0;
 
-  const docsVencidos = canRead(user.rol, "seguridad")
-    ? get<{ n: number }>(`SELECT COUNT(*) as n FROM documentos_seguridad WHERE fecha_vencimiento < date('now')`)?.n ?? 0
-    : 0;
-  const docsPorVencer = canRead(user.rol, "seguridad")
-    ? get<{ n: number }>(`SELECT COUNT(*) as n FROM documentos_seguridad WHERE fecha_vencimiento >= date('now') AND fecha_vencimiento <= date('now','+15 days')`)?.n ?? 0
-    : 0;
-  const riesgosAbiertos = canRead(user.rol, "seguridad")
-    ? get<{ n: number }>(`SELECT COUNT(*) as n FROM incidentes_seguridad WHERE estado != 'resuelto'`)?.n ?? 0
-    : 0;
+  const docsVencidos = docsVencidosRow?.n ?? 0;
+  const docsPorVencer = docsPorVencerRow?.n ?? 0;
+  const riesgosAbiertos = riesgosAbiertosRow?.n ?? 0;
 
-  const verFinanzasDetalle = ROLES_FINANZAS_DETALLE.includes(user.rol);
-  const fin = canRead(user.rol, "finanzas") ? resumenFinanciero() : null;
-  const proximosPagos = verFinanzasDetalle ? all<any>(`SELECT * FROM compromisos_futuros ORDER BY fecha_estimada ASC LIMIT 3`) : [];
-
-  const alertas = all<any>(`SELECT * FROM alertas WHERE estado='abierta' ORDER BY CASE severidad WHEN 'critica' THEN 0 WHEN 'importante' THEN 1 ELSE 2 END, fecha DESC`);
   const criticas = alertas.filter((a) => a.severidad === "critica");
   const importantes = alertas.filter((a) => a.severidad === "importante");
   const informativas = alertas.filter((a) => a.severidad === "informativa");

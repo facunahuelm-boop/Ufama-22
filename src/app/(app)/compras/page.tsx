@@ -20,7 +20,7 @@ export default async function ComprasPage() {
   if (!canRead(user.rol, "compras")) redirect("/dashboard");
 
   const puedeEditar = canEdit(user.rol, "compras");
-  const solicitudes = all<any>(`SELECT sc.*, u.nombre as solicitante_nombre FROM solicitudes_compra sc LEFT JOIN users u ON u.id = sc.solicitante_id ORDER BY CASE prioridad WHEN 'critica' THEN 0 WHEN 'alta' THEN 1 WHEN 'media' THEN 2 ELSE 3 END, sc.creado_en DESC`);
+  const solicitudes = await all<any>(`SELECT sc.*, u.nombre as solicitante_nombre FROM solicitudes_compra sc LEFT JOIN users u ON u.id = sc.solicitante_id ORDER BY CASE prioridad WHEN 'critica' THEN 0 WHEN 'alta' THEN 1 WHEN 'media' THEN 2 ELSE 3 END, sc.creado_en DESC`);
 
   return (
     <div>

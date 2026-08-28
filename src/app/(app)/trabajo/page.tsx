@@ -13,16 +13,21 @@ export default async function TrabajoPage() {
   if (!canRead(user.rol, "trabajo")) redirect("/dashboard");
 
   const puedeEditar = canEdit(user.rol, "trabajo");
-  const proximaJornada = get<any>(`SELECT * FROM jornadas_trabajo WHERE fecha >= date('now') ORDER BY fecha ASC LIMIT 1`);
-  const pasadas = all<any>(`SELECT * FROM jornadas_trabajo WHERE fecha < date('now') ORDER BY fecha DESC LIMIT 8`);
-  const nucleos = all<any>(`SELECT * FROM nucleos_familiares ORDER BY horas_acumuladas DESC`);
+  const [proximaJornada, pasadas, nucleos] = await Promise.all([
+    get<any>(`SELECT * FROM jornadas_trabajo WHERE fecha >= CURRENT_DATE::text ORDER BY fecha ASC LIMIT 1`),
+    all<any>(`SELECT * FROM jornadas_trabajo WHERE fecha < CURRENT_DATE::text ORDER BY fecha DESC LIMIT 8`),
+    all<any>(`SELECT * FROM nucleos_familiares ORDER BY horas_acumuladas DESC`),
+  ]);
 
   let tareasJornada: any[] = [];
   if (proximaJornada) {
-    tareasJornada = all<any>(`SELECT * FROM tareas_jornada WHERE jornada_id = ?`, [proximaJornada.id]).map((t) => {
-      const asignaciones = all<any>(`SELECT a.*, n.nombre as nucleo_nombre FROM asignaciones_jornada a JOIN nucleos_familiares n ON n.id = a.nucleo_id WHERE tarea_jornada_id = ?`, [t.id]);
-      return { ...t, asignaciones };
-    });
+    const tareasJornadaBase = await all<any>(`SELECT * FROM tareas_jornada WHERE jornada_id = ?`, [proximaJornada.id]);
+    tareasJornada = await Promise.all(
+      tareasJornadaBase.map(async (t) => {
+        const asignaciones = await all<any>(`SELECT a.*, n.nombre as nucleo_nombre FROM asignaciones_jornada a JOIN nucleos_familiares n ON n.id = a.nucleo_id WHERE tarea_jornada_id = ?`, [t.id]);
+        return { ...t, asignaciones };
+      })
+    );
   }
 
   return (

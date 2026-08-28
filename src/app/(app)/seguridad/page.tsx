@@ -13,9 +13,11 @@ export default async function SeguridadPage() {
   if (!canRead(user.rol, "seguridad")) redirect("/dashboard");
 
   const puedeEditar = canEdit(user.rol, "seguridad");
-  const docs = all<any>(`SELECT * FROM documentos_seguridad ORDER BY fecha_vencimiento ASC`);
-  const incidentes = all<any>(`SELECT i.*, u.nombre as autor_nombre FROM incidentes_seguridad i LEFT JOIN users u ON u.id = i.autor_id ORDER BY fecha DESC`);
-  const inspecciones = all<any>(`SELECT i.*, u.nombre as autor_nombre FROM inspecciones_seguridad i LEFT JOIN users u ON u.id = i.autor_id ORDER BY fecha DESC LIMIT 5`);
+  const [docs, incidentes, inspecciones] = await Promise.all([
+    all<any>(`SELECT * FROM documentos_seguridad ORDER BY fecha_vencimiento ASC`),
+    all<any>(`SELECT i.*, u.nombre as autor_nombre FROM incidentes_seguridad i LEFT JOIN users u ON u.id = i.autor_id ORDER BY fecha DESC`),
+    all<any>(`SELECT i.*, u.nombre as autor_nombre FROM inspecciones_seguridad i LEFT JOIN users u ON u.id = i.autor_id ORDER BY fecha DESC LIMIT 5`),
+  ]);
   const hoy = dayjs();
 
   return (

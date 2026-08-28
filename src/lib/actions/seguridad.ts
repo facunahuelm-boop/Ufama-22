@@ -10,7 +10,7 @@ import { CHECKLIST_BASE } from "@/lib/constants";
 export async function crearDocumentoSeguridadAction(formData: FormData) {
   const user = await requireUser();
   if (!canEdit(user.rol, "seguridad")) throw new Error("No autorizado");
-  insert("documentos_seguridad", {
+  await insert("documentos_seguridad", {
     tipo: String(formData.get("tipo") || ""),
     descripcion: String(formData.get("descripcion") || "") || null,
     fecha_vencimiento: String(formData.get("fecha_vencimiento") || "") || null,
@@ -23,7 +23,7 @@ export async function crearInspeccionAction(formData: FormData) {
   const user = await requireUser();
   if (!canEdit(user.rol, "seguridad")) throw new Error("No autorizado");
   const checklist = CHECKLIST_BASE.map((item, i) => ({ item, ok: formData.get(`item_${i}`) === "on" }));
-  insert("inspecciones_seguridad", {
+  await insert("inspecciones_seguridad", {
     checklist_json: JSON.stringify(checklist),
     hallazgos: String(formData.get("hallazgos") || "") || null,
     autor_id: user.id,
@@ -40,7 +40,7 @@ export async function crearIncidenteAction(formData: FormData) {
   const iaObs = foto
     ? "Asistencia preliminar de IA: no se detectaron elementos de protección visibles en la descripción. Esta es una observación automática preliminar, no un diagnóstico definitivo — debe confirmarla el responsable de seguridad, el técnico prevencionista o el IAT."
     : null;
-  const id = insert("incidentes_seguridad", {
+  const id = await insert("incidentes_seguridad", {
     tipo: String(formData.get("tipo") || "observacion"),
     descripcion: String(formData.get("descripcion") || ""),
     severidad: String(formData.get("severidad") || "media"),
@@ -49,7 +49,7 @@ export async function crearIncidenteAction(formData: FormData) {
     estado: "abierto",
     autor_id: user.id,
   });
-  audit({ usuario_id: user.id, accion: "crear", entidad: "incidentes_seguridad", entidad_id: id, valor_nuevo: { severidad: formData.get("severidad") } });
+  await audit({ usuario_id: user.id, accion: "crear", entidad: "incidentes_seguridad", entidad_id: id, valor_nuevo: { severidad: formData.get("severidad") } });
   revalidatePath("/seguridad");
 }
 
@@ -57,7 +57,7 @@ export async function resolverIncidenteAction(formData: FormData) {
   const user = await requireUser();
   if (!canEdit(user.rol, "seguridad")) throw new Error("No autorizado");
   const id = Number(formData.get("id"));
-  update("incidentes_seguridad", id, { estado: "resuelto", medidas: String(formData.get("medidas") || "") });
-  audit({ usuario_id: user.id, accion: "resolver", entidad: "incidentes_seguridad", entidad_id: id });
+  await update("incidentes_seguridad", id, { estado: "resuelto", medidas: String(formData.get("medidas") || "") });
+  await audit({ usuario_id: user.id, accion: "resolver", entidad: "incidentes_seguridad", entidad_id: id });
   revalidatePath("/seguridad");
 }

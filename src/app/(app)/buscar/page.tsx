@@ -16,50 +16,39 @@ export default async function BuscarPage({
   const resultados: any[] = [];
 
   if (q && q.length >= 2) {
-    // Buscar en tareas de obra
-    const tareas = all<any>(
-      `SELECT 'obra' as tipo, id, nombre as titulo, 'Obra' as modulo, estado FROM tareas_obra WHERE nombre LIKE ? OR descripcion LIKE ? LIMIT 10`,
-      [`%${q}%`, `%${q}%`]
-    );
-    resultados.push(
-      ...tareas.map((t) => ({ ...t, href: `/obra/${t.id}` }))
-    );
+    const [tareas, compras, docs, jornadas, incidentes] = await Promise.all([
+      // Buscar en tareas de obra
+      all<any>(
+        `SELECT 'obra' as tipo, id, nombre as titulo, 'Obra' as modulo, estado FROM tareas_obra WHERE nombre LIKE ? OR descripcion LIKE ? LIMIT 10`,
+        [`%${q}%`, `%${q}%`]
+      ),
+      // Buscar en compras
+      all<any>(
+        `SELECT 'compra' as tipo, id, material as titulo, 'Compras' as modulo, estado FROM solicitudes_compra WHERE material LIKE ? OR especificacion LIKE ? LIMIT 10`,
+        [`%${q}%`, `%${q}%`]
+      ),
+      // Buscar en documentos
+      all<any>(
+        `SELECT 'documento' as tipo, id, nombre as titulo, 'Documentos' as modulo, categoria as estado FROM documentos WHERE nombre LIKE ? OR descripcion LIKE ? LIMIT 10`,
+        [`%${q}%`, `%${q}%`]
+      ),
+      // Buscar en jornadas
+      all<any>(
+        `SELECT 'jornada' as tipo, id, descripcion as titulo, 'Trabajo' as modulo, estado FROM jornadas_trabajo WHERE descripcion LIKE ? LIMIT 10`,
+        [`%${q}%`]
+      ),
+      // Buscar en incidentes de seguridad
+      all<any>(
+        `SELECT 'incidente' as tipo, id, descripcion as titulo, 'Seguridad' as modulo, estado FROM incidentes_seguridad WHERE descripcion LIKE ? LIMIT 10`,
+        [`%${q}%`]
+      ),
+    ]);
 
-    // Buscar en compras
-    const compras = all<any>(
-      `SELECT 'compra' as tipo, id, concepto as titulo, 'Compras' as modulo, estado FROM solicitudes_compra WHERE concepto LIKE ? OR descripcion LIKE ? LIMIT 10`,
-      [`%${q}%`, `%${q}%`]
-    );
-    resultados.push(
-      ...compras.map((c) => ({ ...c, href: `/compras/${c.id}` }))
-    );
-
-    // Buscar en documentos
-    const docs = all<any>(
-      `SELECT 'documento' as tipo, id, titulo as titulo, 'Documentos' as modulo, categoria as estado FROM documentos WHERE titulo LIKE ? OR descripcion LIKE ? LIMIT 10`,
-      [`%${q}%`, `%${q}%`]
-    );
-    resultados.push(
-      ...docs.map((d) => ({ ...d, href: `/documentos#${d.id}` }))
-    );
-
-    // Buscar en jornadas
-    const jornadas = all<any>(
-      `SELECT 'jornada' as tipo, id, descripcion as titulo, 'Trabajo' as modulo, estado FROM jornadas_trabajo WHERE descripcion LIKE ? LIMIT 10`,
-      [`%${q}%`]
-    );
-    resultados.push(
-      ...jornadas.map((j) => ({ ...j, href: `/trabajo/${j.id}` }))
-    );
-
-    // Buscar en incidentes de seguridad
-    const incidentes = all<any>(
-      `SELECT 'incidente' as tipo, id, descripcion as titulo, 'Seguridad' as modulo, estado FROM incidentes_seguridad WHERE descripcion LIKE ? LIMIT 10`,
-      [`%${q}%`]
-    );
-    resultados.push(
-      ...incidentes.map((i) => ({ ...i, href: `/seguridad#${i.id}` }))
-    );
+    resultados.push(...tareas.map((t) => ({ ...t, href: `/obra/${t.id}` })));
+    resultados.push(...compras.map((c) => ({ ...c, href: `/compras/${c.id}` })));
+    resultados.push(...docs.map((d) => ({ ...d, href: `/documentos#${d.id}` })));
+    resultados.push(...jornadas.map((j) => ({ ...j, href: `/trabajo/${j.id}` })));
+    resultados.push(...incidentes.map((i) => ({ ...i, href: `/seguridad#${i.id}` })));
   }
 
   return (

@@ -8,7 +8,7 @@ export async function loginAction(_prev: { error?: string } | undefined, formDat
   const email = String(formData.get("email") || "").trim().toLowerCase();
   const password = String(formData.get("password") || "");
 
-  const user = get<any>(`SELECT * FROM users WHERE email = ? AND activo = 1`, [email]);
+  const user = await get<any>(`SELECT * FROM users WHERE email = ? AND activo = 1`, [email]);
   if (!user) return { error: "No encontramos ese usuario." };
 
   const ok = await verifyPassword(password, user.password_hash);

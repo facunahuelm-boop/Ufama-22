@@ -11,7 +11,7 @@ export default async function ReportesPage() {
   if (!user) redirect("/login");
   if (!canRead(user.rol, "finanzas")) redirect("/dashboard");
 
-  const ultimosReportes = all<any>(
+  const ultimosReportes = await all<any>(
     `SELECT * FROM reportes_generados WHERE creado_por_id = ? ORDER BY creado_en DESC LIMIT 5`,
     [user.id]
   );

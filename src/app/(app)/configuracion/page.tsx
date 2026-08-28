@@ -13,14 +13,17 @@ export default async function ConfiguracionPage() {
     redirect("/dashboard");
   }
 
-  const config = all<any>(`SELECT * FROM config_email`);
+  const [config, alertasEmail, usuariosActivosRow] = await Promise.all([
+    all<any>(`SELECT * FROM config_email`),
+    all<any>(
+      `SELECT ae.*, u.nombre as usuario_nombre FROM alertas_email ae
+       LEFT JOIN users u ON u.id = ae.usuario_id
+       ORDER BY ae.rol ASC`
+    ),
+    all<any>(`SELECT COUNT(*) as c FROM users WHERE activo = 1`),
+  ]);
   const configObj = Object.fromEntries(config.map((c: any) => [c.clave, c.valor]));
-
-  const alertasEmail = all<any>(
-    `SELECT ae.*, u.nombre as usuario_nombre FROM alertas_email ae
-     LEFT JOIN users u ON u.id = ae.usuario_id
-     ORDER BY ae.rol ASC`
-  );
+  const usuariosActivos = usuariosActivosRow[0]?.c ?? 0;
 
   return (
     <div>
@@ -139,11 +142,11 @@ export default async function ConfiguracionPage() {
           </div>
           <div className="flex justify-between">
             <span className="text-black/60">Base de datos:</span>
-            <span className="font-semibold">SQLite (local)</span>
+            <span className="font-semibold">PostgreSQL (Supabase)</span>
           </div>
           <div className="flex justify-between">
             <span className="text-black/60">Usuarios activos:</span>
-            <span className="font-semibold">{all<any>(`SELECT COUNT(*) as c FROM users WHERE activo = 1`)[0].c}</span>
+            <span className="font-semibold">{usuariosActivos}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-black/60">Email configurado:</span>

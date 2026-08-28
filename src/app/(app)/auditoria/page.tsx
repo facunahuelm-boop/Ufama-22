@@ -10,7 +10,7 @@ export default async function AuditoriaPage() {
   if (!user) redirect("/login");
   if (!canRead(user.rol, "auditoria")) redirect("/dashboard");
 
-  const registros = all<any>(`SELECT a.*, u.nombre as usuario_nombre FROM auditoria a LEFT JOIN users u ON u.id = a.usuario_id ORDER BY a.fecha DESC LIMIT 200`);
+  const registros = await all<any>(`SELECT a.*, u.nombre as usuario_nombre FROM auditoria a LEFT JOIN users u ON u.id = a.usuario_id ORDER BY a.fecha DESC LIMIT 200`);
 
   return (
     <div>

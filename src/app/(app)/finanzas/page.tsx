@@ -17,9 +17,11 @@ export default async function FinanzasPage() {
 
   const detalle = ROLES_FINANZAS_DETALLE.includes(user.rol);
   const puedeEditar = canEdit(user.rol, "finanzas");
-  const fin = resumenFinanciero();
-  const movimientos = all<any>(`SELECT m.*, u.nombre as registrado_por FROM movimientos_financieros m LEFT JOIN users u ON u.id = m.registrado_por_id ORDER BY fecha DESC LIMIT 15`);
-  const compromisos = all<any>(`SELECT * FROM compromisos_futuros ORDER BY fecha_estimada ASC`);
+  const [fin, movimientos, compromisos] = await Promise.all([
+    resumenFinanciero(),
+    all<any>(`SELECT m.*, u.nombre as registrado_por FROM movimientos_financieros m LEFT JOIN users u ON u.id = m.registrado_por_id ORDER BY fecha DESC LIMIT 15`),
+    all<any>(`SELECT * FROM compromisos_futuros ORDER BY fecha_estimada ASC`),
+  ]);
   const maxCategoria = Math.max(1, ...fin.porCategoria.map((c: any) => c.total));
 
   return (

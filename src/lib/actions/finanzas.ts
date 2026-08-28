@@ -8,7 +8,7 @@ import { canEdit } from "@/lib/roles";
 export async function registrarMovimientoAction(formData: FormData) {
   const user = await requireUser();
   if (!canEdit(user.rol, "finanzas")) throw new Error("No autorizado");
-  const id = insert("movimientos_financieros", {
+  const id = await insert("movimientos_financieros", {
     tipo: String(formData.get("tipo") || "egreso"),
     monto: Number(formData.get("monto") || 0),
     categoria: String(formData.get("categoria") || ""),
@@ -16,7 +16,7 @@ export async function registrarMovimientoAction(formData: FormData) {
     descripcion: String(formData.get("descripcion") || "") || null,
     registrado_por_id: user.id,
   });
-  audit({ usuario_id: user.id, accion: "registrar_movimiento", entidad: "movimientos_financieros", entidad_id: id, valor_nuevo: Object.fromEntries(formData) });
+  await audit({ usuario_id: user.id, accion: "registrar_movimiento", entidad: "movimientos_financieros", entidad_id: id, valor_nuevo: Object.fromEntries(formData) });
   revalidatePath("/finanzas");
   revalidatePath("/dashboard");
 }
@@ -24,7 +24,7 @@ export async function registrarMovimientoAction(formData: FormData) {
 export async function agregarCompromisoAction(formData: FormData) {
   const user = await requireUser();
   if (!canEdit(user.rol, "finanzas")) throw new Error("No autorizado");
-  insert("compromisos_futuros", {
+  await insert("compromisos_futuros", {
     descripcion: String(formData.get("descripcion") || ""),
     monto: Number(formData.get("monto") || 0),
     fecha_estimada: String(formData.get("fecha_estimada") || ""),

@@ -15,11 +15,13 @@ export default async function TareaObraPage({ params }: { params: Promise<{ id: 
   if (!user) redirect("/login");
   if (!canRead(user.rol, "obra")) redirect("/dashboard");
 
-  const tarea = get<any>(`SELECT t.*, u.nombre as responsable_nombre FROM tareas_obra t LEFT JOIN users u ON u.id = t.responsable_id WHERE t.id = ?`, [id]);
+  const [tarea, avances, problemas] = await Promise.all([
+    get<any>(`SELECT t.*, u.nombre as responsable_nombre FROM tareas_obra t LEFT JOIN users u ON u.id = t.responsable_id WHERE t.id = ?`, [id]),
+    all<any>(`SELECT a.*, u.nombre as autor_nombre FROM avances_obra a LEFT JOIN users u ON u.id = a.autor_id WHERE tarea_id = ? ORDER BY fecha DESC`, [id]),
+    all<any>(`SELECT p.*, u.nombre as autor_nombre FROM problemas_obra p LEFT JOIN users u ON u.id = p.autor_id WHERE tarea_id = ? ORDER BY fecha DESC`, [id]),
+  ]);
   if (!tarea) notFound();
-  const semaforo = semaforoTarea(tarea);
-  const avances = all<any>(`SELECT a.*, u.nombre as autor_nombre FROM avances_obra a LEFT JOIN users u ON u.id = a.autor_id WHERE tarea_id = ? ORDER BY fecha DESC`, [id]);
-  const problemas = all<any>(`SELECT p.*, u.nombre as autor_nombre FROM problemas_obra p LEFT JOIN users u ON u.id = p.autor_id WHERE tarea_id = ? ORDER BY fecha DESC`, [id]);
+  const semaforo = await semaforoTarea(tarea);
   const puedeEditar = canEdit(user.rol, "obra");
 
   return (

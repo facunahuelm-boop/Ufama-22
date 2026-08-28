@@ -12,10 +12,12 @@ export default async function JornadaPage({ params }: { params: Promise<{ id: st
   if (!user) redirect("/login");
   if (!canRead(user.rol, "trabajo")) redirect("/dashboard");
 
-  const jornada = get<any>(`SELECT * FROM jornadas_trabajo WHERE id = ?`, [id]);
+  const [jornada, nucleos, asistencias] = await Promise.all([
+    get<any>(`SELECT * FROM jornadas_trabajo WHERE id = ?`, [id]),
+    all<any>(`SELECT * FROM nucleos_familiares ORDER BY nombre`),
+    all<any>(`SELECT * FROM asistencias WHERE jornada_id = ?`, [id]),
+  ]);
   if (!jornada) notFound();
-  const nucleos = all<any>(`SELECT * FROM nucleos_familiares ORDER BY nombre`);
-  const asistencias = all<any>(`SELECT * FROM asistencias WHERE jornada_id = ?`, [id]);
   const puedeEditar = canEdit(user.rol, "trabajo");
   const asistenciaPorNucleo = Object.fromEntries(asistencias.map((a) => [a.nucleo_id, a]));
   const presentes = asistencias.filter((a) => a.presente).length;

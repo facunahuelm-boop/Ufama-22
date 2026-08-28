@@ -17,9 +17,11 @@ export default async function ObraPage() {
   if (!user) redirect("/login");
   if (!canRead(user.rol, "obra")) redirect("/dashboard");
 
-  const tareas = tareasObraConSemaforo();
+  const [tareas, problemasAbiertos] = await Promise.all([
+    tareasObraConSemaforo(),
+    all<any>(`SELECT p.*, t.nombre as tarea_nombre FROM problemas_obra p LEFT JOIN tareas_obra t ON t.id = p.tarea_id WHERE p.estado='abierto' ORDER BY p.severidad`),
+  ]);
   const etapas = Array.from(new Set(tareas.map((t: any) => t.etapa)));
-  const problemasAbiertos = all<any>(`SELECT p.*, t.nombre as tarea_nombre FROM problemas_obra p LEFT JOIN tareas_obra t ON t.id = p.tarea_id WHERE p.estado='abierto' ORDER BY p.severidad`);
   const puedeEditar = canEdit(user.rol, "obra");
 
   return (

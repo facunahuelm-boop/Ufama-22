@@ -14,10 +14,12 @@ const MOD_LABEL: Record<string, string> = { obra: "🏗️ Obra", trabajo: "🤝
 export default async function AlertasPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  recalcularAlertas();
+  await recalcularAlertas();
 
-  const abiertas = all<any>(`SELECT * FROM alertas WHERE estado='abierta' ORDER BY CASE severidad WHEN 'critica' THEN 0 WHEN 'importante' THEN 1 ELSE 2 END, fecha DESC`);
-  const resueltas = all<any>(`SELECT * FROM alertas WHERE estado='resuelta' ORDER BY fecha DESC LIMIT 10`);
+  const [abiertas, resueltas] = await Promise.all([
+    all<any>(`SELECT * FROM alertas WHERE estado='abierta' ORDER BY CASE severidad WHEN 'critica' THEN 0 WHEN 'importante' THEN 1 ELSE 2 END, fecha DESC`),
+    all<any>(`SELECT * FROM alertas WHERE estado='resuelta' ORDER BY fecha DESC LIMIT 10`),
+  ]);
 
   return (
     <div>

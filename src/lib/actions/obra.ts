@@ -10,7 +10,7 @@ export async function crearTareaAction(formData: FormData) {
   const user = await requireUser();
   if (!canEdit(user.rol, "obra")) throw new Error("No autorizado");
 
-  const id = insert("tareas_obra", {
+  const id = await insert("tareas_obra", {
     etapa: String(formData.get("etapa") || ""),
     nombre: String(formData.get("nombre") || ""),
     descripcion: String(formData.get("descripcion") || "") || null,
@@ -20,7 +20,7 @@ export async function crearTareaAction(formData: FormData) {
     responsable_id: user.id,
     estado: "pendiente",
   });
-  audit({ usuario_id: user.id, accion: "crear", entidad: "tareas_obra", entidad_id: id, valor_nuevo: { nombre: formData.get("nombre") } });
+  await audit({ usuario_id: user.id, accion: "crear", entidad: "tareas_obra", entidad_id: id, valor_nuevo: { nombre: formData.get("nombre") } });
   revalidatePath("/obra");
 }
 
@@ -29,8 +29,8 @@ export async function cambiarEstadoTareaAction(formData: FormData) {
   if (!canEdit(user.rol, "obra")) throw new Error("No autorizado");
   const id = Number(formData.get("id"));
   const estado = String(formData.get("estado"));
-  update("tareas_obra", id, { estado });
-  audit({ usuario_id: user.id, accion: "actualizar_estado", entidad: "tareas_obra", entidad_id: id, valor_nuevo: { estado } });
+  await update("tareas_obra", id, { estado });
+  await audit({ usuario_id: user.id, accion: "actualizar_estado", entidad: "tareas_obra", entidad_id: id, valor_nuevo: { estado } });
   revalidatePath("/obra");
   revalidatePath(`/obra/${id}`);
 }
@@ -40,7 +40,7 @@ export async function agregarAvanceAction(formData: FormData) {
   if (!canEdit(user.rol, "obra")) throw new Error("No autorizado");
   const tareaId = Number(formData.get("tarea_id"));
   const fotoUrl = await saveUploadedFile(formData.get("foto") as File | null);
-  insert("avances_obra", {
+  await insert("avances_obra", {
     tarea_id: tareaId,
     autor_id: user.id,
     descripcion: String(formData.get("descripcion") || ""),
@@ -53,7 +53,7 @@ export async function agregarProblemaAction(formData: FormData) {
   const user = await requireUser();
   if (!canEdit(user.rol, "obra")) throw new Error("No autorizado");
   const tareaId = Number(formData.get("tarea_id")) || null;
-  const id = insert("problemas_obra", {
+  const id = await insert("problemas_obra", {
     tarea_id: tareaId,
     titulo: String(formData.get("titulo") || ""),
     descripcion: String(formData.get("descripcion") || "") || null,
@@ -61,7 +61,7 @@ export async function agregarProblemaAction(formData: FormData) {
     autor_id: user.id,
     estado: "abierto",
   });
-  audit({ usuario_id: user.id, accion: "crear", entidad: "problemas_obra", entidad_id: id });
+  await audit({ usuario_id: user.id, accion: "crear", entidad: "problemas_obra", entidad_id: id });
   if (tareaId) revalidatePath(`/obra/${tareaId}`);
   revalidatePath("/obra");
 }
@@ -71,8 +71,8 @@ export async function resolverProblemaAction(formData: FormData) {
   if (!canEdit(user.rol, "obra")) throw new Error("No autorizado");
   const id = Number(formData.get("id"));
   const tareaId = formData.get("tarea_id") ? Number(formData.get("tarea_id")) : null;
-  update("problemas_obra", id, { estado: "resuelto", resolucion: String(formData.get("resolucion") || "") });
-  audit({ usuario_id: user.id, accion: "resolver", entidad: "problemas_obra", entidad_id: id });
+  await update("problemas_obra", id, { estado: "resuelto", resolucion: String(formData.get("resolucion") || "") });
+  await audit({ usuario_id: user.id, accion: "resolver", entidad: "problemas_obra", entidad_id: id });
   if (tareaId) revalidatePath(`/obra/${tareaId}`);
   revalidatePath("/obra");
 }

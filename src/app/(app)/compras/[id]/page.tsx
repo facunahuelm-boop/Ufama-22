@@ -13,11 +13,13 @@ export default async function SolicitudPage({ params }: { params: Promise<{ id: 
   if (!user) redirect("/login");
   if (!canRead(user.rol, "compras")) redirect("/dashboard");
 
-  const solicitud = get<any>(`SELECT * FROM solicitudes_compra WHERE id = ?`, [id]);
+  const [solicitud, proveedores, comparacion, decision] = await Promise.all([
+    get<any>(`SELECT * FROM solicitudes_compra WHERE id = ?`, [id]),
+    all<any>(`SELECT * FROM proveedores ORDER BY nombre`),
+    compararPresupuestos(Number(id)),
+    get<any>(`SELECT dc.*, pp.proveedor_id, pv.nombre as proveedor_nombre, u.nombre as decidido_por FROM decisiones_compra dc JOIN presupuestos_proveedor pp ON pp.id = dc.presupuesto_id JOIN proveedores pv ON pv.id = pp.proveedor_id LEFT JOIN users u ON u.id = dc.decidido_por_id WHERE dc.solicitud_id = ? ORDER BY dc.fecha DESC LIMIT 1`, [id]),
+  ]);
   if (!solicitud) notFound();
-  const proveedores = all<any>(`SELECT * FROM proveedores ORDER BY nombre`);
-  const comparacion = compararPresupuestos(Number(id));
-  const decision = get<any>(`SELECT dc.*, pp.proveedor_id, pv.nombre as proveedor_nombre, u.nombre as decidido_por FROM decisiones_compra dc JOIN presupuestos_proveedor pp ON pp.id = dc.presupuesto_id JOIN proveedores pv ON pv.id = pp.proveedor_id LEFT JOIN users u ON u.id = dc.decidido_por_id WHERE dc.solicitud_id = ? ORDER BY dc.fecha DESC LIMIT 1`, [id]);
   const puedeEditar = canEdit(user.rol, "compras");
   const puedeAprobar = canApprove(user.rol, "compras");
 

@@ -4,13 +4,13 @@ import { all, get, upsertAlerta, insert } from "./db";
 // ============ SEMÁFORO DE OBRA ============
 export type Semaforo = "verde" | "amarillo" | "rojo";
 
-export function semaforoTarea(tarea: {
+export async function semaforoTarea(tarea: {
   estado: string;
   fecha_fin_prevista: string | null;
   id: number;
-}): Semaforo {
+}): Promise<Semaforo> {
   if (tarea.estado === "completada") return "verde";
-  const problemasCriticos = get<{ n: number }>(
+  const problemasCriticos = await get<{ n: number }>(
     `SELECT COUNT(*) as n FROM problemas_obra WHERE tarea_id = ? AND estado = 'abierto' AND severidad = 'critica'`,
     [tarea.id]
   );
@@ -21,7 +21,7 @@ export function semaforoTarea(tarea: {
     if (dias < 0) return "rojo";
     if (dias <= 5) return "amarillo";
   }
-  const problemasAbiertos = get<{ n: number }>(
+  const problemasAbiertos = await get<{ n: number }>(
     `SELECT COUNT(*) as n FROM problemas_obra WHERE tarea_id = ? AND estado = 'abierto'`,
     [tarea.id]
   );
@@ -29,42 +29,46 @@ export function semaforoTarea(tarea: {
   return "verde";
 }
 
-export function tareasObraConSemaforo() {
-  const tareas = all<any>(
+export async function tareasObraConSemaforo() {
+  const tareas = await all<any>(
     `SELECT t.*, u.nombre as responsable_nombre, d.nombre as depende_de_nombre
      FROM tareas_obra t
      LEFT JOIN users u ON u.id = t.responsable_id
      LEFT JOIN tareas_obra d ON d.id = t.depende_de_id
      ORDER BY t.fecha_fin_prevista ASC`
   );
-  return tareas.map((t) => ({ ...t, semaforo: semaforoTarea(t) }));
+  return Promise.all(tareas.map(async (t) => ({ ...t, semaforo: await semaforoTarea(t) })));
 }
 
 // ============ FINANZAS ============
-export function resumenFinanciero() {
-  const ingresos = get<{ s: number }>(`SELECT COALESCE(SUM(monto),0) as s FROM movimientos_financieros WHERE tipo = 'ingreso'`)?.s ?? 0;
-  const egresos = get<{ s: number }>(`SELECT COALESCE(SUM(monto),0) as s FROM movimientos_financieros WHERE tipo = 'egreso'`)?.s ?? 0;
-  const saldo = ingresos - egresos;
-
-  const comprometido = get<{ s: number }>(`SELECT COALESCE(SUM(monto),0) as s FROM compromisos_futuros`)?.s ?? 0;
-
+export async function resumenFinanciero() {
   const en30dias = dayjs().add(30, "day").format("YYYY-MM-DD");
-  const gastosProyectados = get<{ s: number }>(
-    `SELECT COALESCE(SUM(monto),0) as s FROM compromisos_futuros WHERE fecha_estimada <= ?`,
-    [en30dias]
-  )?.s ?? 0;
 
+  const [ingresosRow, egresosRow, comprometidoRow, gastosProyectadosRow, porCategoria, presupuestoVsReal] =
+    await Promise.all([
+      get<{ s: number }>(`SELECT COALESCE(SUM(monto),0) as s FROM movimientos_financieros WHERE tipo = 'ingreso'`),
+      get<{ s: number }>(`SELECT COALESCE(SUM(monto),0) as s FROM movimientos_financieros WHERE tipo = 'egreso'`),
+      get<{ s: number }>(`SELECT COALESCE(SUM(monto),0) as s FROM compromisos_futuros`),
+      get<{ s: number }>(
+        `SELECT COALESCE(SUM(monto),0) as s FROM compromisos_futuros WHERE fecha_estimada <= ?`,
+        [en30dias]
+      ),
+      all<{ categoria: string; total: number }>(
+        `SELECT categoria, COALESCE(SUM(monto),0) as total FROM movimientos_financieros WHERE tipo='egreso' GROUP BY categoria ORDER BY total DESC`
+      ),
+      all<any>(
+        `SELECT p.categoria, p.monto_presupuestado,
+           COALESCE((SELECT SUM(monto) FROM movimientos_financieros m WHERE m.categoria = p.categoria AND m.tipo='egreso'), 0) as gastado
+         FROM presupuesto_general p`
+      ),
+    ]);
+
+  const ingresos = ingresosRow?.s ?? 0;
+  const egresos = egresosRow?.s ?? 0;
+  const saldo = ingresos - egresos;
+  const comprometido = comprometidoRow?.s ?? 0;
+  const gastosProyectados = gastosProyectadosRow?.s ?? 0;
   const disponiblePrudencial = saldo - comprometido;
-
-  const porCategoria = all<{ categoria: string; total: number }>(
-    `SELECT categoria, COALESCE(SUM(monto),0) as total FROM movimientos_financieros WHERE tipo='egreso' GROUP BY categoria ORDER BY total DESC`
-  );
-
-  const presupuestoVsReal = all<any>(
-    `SELECT p.categoria, p.monto_presupuestado,
-       COALESCE((SELECT SUM(monto) FROM movimientos_financieros m WHERE m.categoria = p.categoria AND m.tipo='egreso'), 0) as gastado
-     FROM presupuesto_general p`
-  );
 
   return { ingresos, egresos, saldo, comprometido, gastosProyectados, disponiblePrudencial, porCategoria, presupuestoVsReal };
 }
@@ -72,14 +76,14 @@ export function resumenFinanciero() {
 // ============ MOTOR DE ALERTAS ============
 // Recalcula alertas automáticas a partir de los datos actuales.
 // Los umbrales son un punto de partida configurable (ver sección 12 del análisis).
-export function recalcularAlertas() {
+export async function recalcularAlertas() {
   // Documentos de seguridad vencidos / próximos a vencer
-  const docs = all<any>(`SELECT * FROM documentos_seguridad WHERE fecha_vencimiento IS NOT NULL`);
+  const docs = await all<any>(`SELECT * FROM documentos_seguridad WHERE fecha_vencimiento IS NOT NULL`);
   const hoy = dayjs();
-  docs.forEach((d) => {
+  for (const d of docs) {
     const dias = dayjs(d.fecha_vencimiento).diff(hoy, "day");
     if (dias < 0) {
-      upsertAlerta({
+      await upsertAlerta({
         tipo: "documento_vencido",
         severidad: "critica",
         origen_modulo: "seguridad",
@@ -90,7 +94,7 @@ export function recalcularAlertas() {
         ref_id: d.id,
       });
     } else if (dias <= 15) {
-      upsertAlerta({
+      await upsertAlerta({
         tipo: "documento_por_vencer",
         severidad: "importante",
         origen_modulo: "seguridad",
@@ -101,14 +105,14 @@ export function recalcularAlertas() {
         ref_id: d.id,
       });
     }
-  });
+  }
 
   // Incidentes de seguridad críticos abiertos
-  const incidentesCriticos = all<any>(
+  const incidentesCriticos = await all<any>(
     `SELECT * FROM incidentes_seguridad WHERE estado != 'resuelto' AND severidad = 'critica'`
   );
-  incidentesCriticos.forEach((i) => {
-    upsertAlerta({
+  for (const i of incidentesCriticos) {
+    await upsertAlerta({
       tipo: "riesgo_critico",
       severidad: "critica",
       origen_modulo: "seguridad",
@@ -118,14 +122,14 @@ export function recalcularAlertas() {
       ref_tabla: "incidentes_seguridad",
       ref_id: i.id,
     });
-  });
+  }
 
   // Tareas de obra atrasadas
-  const tareas = tareasObraConSemaforo();
-  tareas.forEach((t: any) => {
+  const tareas = await tareasObraConSemaforo();
+  for (const t of tareas as any[]) {
     if (t.semaforo === "rojo" && t.estado !== "completada") {
       const dias = t.fecha_fin_prevista ? -dayjs(t.fecha_fin_prevista).diff(dayjs(), "day") : null;
-      upsertAlerta({
+      await upsertAlerta({
         tipo: "tarea_atrasada",
         severidad: t.prioridad === "critica" ? "critica" : "importante",
         origen_modulo: "obra",
@@ -136,12 +140,12 @@ export function recalcularAlertas() {
         ref_id: t.id,
       });
     }
-  });
+  }
 
   // Problemas de obra críticos abiertos
-  const problemas = all<any>(`SELECT * FROM problemas_obra WHERE estado='abierto' AND severidad='critica'`);
-  problemas.forEach((p) => {
-    upsertAlerta({
+  const problemas = await all<any>(`SELECT * FROM problemas_obra WHERE estado='abierto' AND severidad='critica'`);
+  for (const p of problemas) {
+    await upsertAlerta({
       tipo: "problema_critico",
       severidad: "critica",
       origen_modulo: "obra",
@@ -151,15 +155,15 @@ export function recalcularAlertas() {
       ref_tabla: "problemas_obra",
       ref_id: p.id,
     });
-  });
+  }
 
   // Compras pendientes de aprobación vinculadas a tarea crítica/alta prioridad
-  const solicitudes = all<any>(
+  const solicitudes = await all<any>(
     `SELECT * FROM solicitudes_compra WHERE estado IN ('pendiente_cotizacion','en_comparacion')`
   );
-  solicitudes.forEach((s) => {
+  for (const s of solicitudes) {
     if (s.prioridad === "critica" || s.prioridad === "alta") {
-      upsertAlerta({
+      await upsertAlerta({
         tipo: "compra_pendiente_critica",
         severidad: s.prioridad === "critica" ? "critica" : "importante",
         origen_modulo: "compras",
@@ -170,12 +174,12 @@ export function recalcularAlertas() {
         ref_id: s.id,
       });
     }
-  });
+  }
 
   // Finanzas: disponible prudencial bajo o negativo
-  const fin = resumenFinanciero();
+  const fin = await resumenFinanciero();
   if (fin.disponiblePrudencial < 0) {
-    upsertAlerta({
+    await upsertAlerta({
       tipo: "disponible_negativo",
       severidad: "critica",
       origen_modulo: "finanzas",
@@ -185,7 +189,7 @@ export function recalcularAlertas() {
       ref_tabla: "movimientos_financieros",
     });
   } else if (fin.disponiblePrudencial < fin.gastosProyectados) {
-    upsertAlerta({
+    await upsertAlerta({
       tipo: "disponible_bajo",
       severidad: "importante",
       origen_modulo: "finanzas",
@@ -197,11 +201,11 @@ export function recalcularAlertas() {
   }
 
   // Presupuesto vs real: desviación > 15%
-  fin.presupuestoVsReal.forEach((p: any) => {
+  for (const p of fin.presupuestoVsReal as any[]) {
     if (p.monto_presupuestado > 0) {
       const desv = (p.gastado - p.monto_presupuestado) / p.monto_presupuestado;
       if (desv > 0.15) {
-        upsertAlerta({
+        await upsertAlerta({
           tipo: "desvio_presupuesto",
           severidad: desv > 0.3 ? "critica" : "importante",
           origen_modulo: "finanzas",
@@ -212,21 +216,22 @@ export function recalcularAlertas() {
         });
       }
     }
-  });
+  }
 
   // Jornada próxima con tareas sin cubrir
-  const proximaJornada = get<any>(
-    `SELECT * FROM jornadas_trabajo WHERE fecha >= date('now') AND estado='planificada' ORDER BY fecha ASC LIMIT 1`
+  const proximaJornada = await get<any>(
+    `SELECT * FROM jornadas_trabajo WHERE fecha >= CURRENT_DATE::text AND estado='planificada' ORDER BY fecha ASC LIMIT 1`
   );
   if (proximaJornada) {
-    const tareasJ = all<any>(`SELECT * FROM tareas_jornada WHERE jornada_id = ?`, [proximaJornada.id]);
-    tareasJ.forEach((tj) => {
-      const asignados = get<{ n: number }>(
+    const tareasJ = await all<any>(`SELECT * FROM tareas_jornada WHERE jornada_id = ?`, [proximaJornada.id]);
+    for (const tj of tareasJ) {
+      const asignadosRow = await get<{ n: number }>(
         `SELECT COUNT(*) as n FROM asignaciones_jornada WHERE tarea_jornada_id = ?`,
         [tj.id]
-      )?.n ?? 0;
+      );
+      const asignados = asignadosRow?.n ?? 0;
       if (asignados < tj.personas_necesarias) {
-        upsertAlerta({
+        await upsertAlerta({
           tipo: "tarea_jornada_sin_cubrir",
           severidad: "importante",
           origen_modulo: "trabajo",
@@ -237,13 +242,13 @@ export function recalcularAlertas() {
           ref_id: tj.id,
         });
       }
-    });
+    }
   }
 }
 
 // ============ COMPARACIÓN DE PRESUPUESTOS (motor local, sin LLM) ============
-export function compararPresupuestos(solicitudId: number) {
-  const presupuestos = all<any>(
+export async function compararPresupuestos(solicitudId: number) {
+  const presupuestos = await all<any>(
     `SELECT pp.*, pv.nombre as proveedor_nombre
      FROM presupuestos_proveedor pp JOIN proveedores pv ON pv.id = pp.proveedor_id
      WHERE pp.solicitud_id = ?`,
@@ -286,25 +291,29 @@ export function compararPresupuestos(solicitudId: number) {
 // Arma un borrador de asignación de núcleos a tareas según habilidades,
 // prioridad y disponibilidad. Siempre queda como propuesta editable
 // (confirmado = 0) hasta que la Comisión de Trabajo la confirme.
-export function proponerDistribucionJornada(jornadaId: number) {
-  const tareas = all<any>(`SELECT * FROM tareas_jornada WHERE jornada_id = ? ORDER BY CASE prioridad WHEN 'alta' THEN 0 WHEN 'critica' THEN -1 ELSE 1 END`, [jornadaId]);
-  const yaAsignados = new Set(all<any>(`SELECT nucleo_id FROM asignaciones_jornada WHERE jornada_id = ?`, [jornadaId]).map((a) => a.nucleo_id));
-  const nucleos = all<any>(`SELECT * FROM nucleos_familiares`).filter((n) => !yaAsignados.has(n.id));
-  const habilidades = all<any>(`SELECT * FROM habilidades_nucleo`);
+export async function proponerDistribucionJornada(jornadaId: number) {
+  const [tareas, asignacionesJornada, nucleosTodos, habilidades] = await Promise.all([
+    all<any>(`SELECT * FROM tareas_jornada WHERE jornada_id = ? ORDER BY CASE prioridad WHEN 'alta' THEN 0 WHEN 'critica' THEN -1 ELSE 1 END`, [jornadaId]),
+    all<any>(`SELECT nucleo_id FROM asignaciones_jornada WHERE jornada_id = ?`, [jornadaId]),
+    all<any>(`SELECT * FROM nucleos_familiares`),
+    all<any>(`SELECT * FROM habilidades_nucleo`),
+  ]);
+  const yaAsignados = new Set(asignacionesJornada.map((a) => a.nucleo_id));
+  const nucleos = nucleosTodos.filter((n) => !yaAsignados.has(n.id));
 
   const propuestas: { tarea: string; nucleo: string; motivo: string }[] = [];
 
-  tareas.forEach((t) => {
-    const yaEnEstaTarea = all<any>(`SELECT * FROM asignaciones_jornada WHERE tarea_jornada_id = ?`, [t.id]).length;
-    let faltan = t.personas_necesarias - yaEnEstaTarea;
-    if (faltan <= 0) return;
+  for (const t of tareas) {
+    const yaEnEstaTareaRows = await all<any>(`SELECT * FROM asignaciones_jornada WHERE tarea_jornada_id = ?`, [t.id]);
+    let faltan = t.personas_necesarias - yaEnEstaTareaRows.length;
+    if (faltan <= 0) continue;
 
     // 1) priorizar núcleos con la habilidad requerida
     if (t.habilidad_requerida) {
       const conHabilidad = nucleos.filter((n) => habilidades.some((h) => h.nucleo_id === n.id && h.habilidad === t.habilidad_requerida) && !yaAsignados.has(n.id));
       for (const n of conHabilidad) {
         if (faltan <= 0) break;
-        insert("asignaciones_jornada", { jornada_id: jornadaId, tarea_jornada_id: t.id, nucleo_id: n.id, propuesta_por_ia: 1, confirmado: 0 });
+        await insert("asignaciones_jornada", { jornada_id: jornadaId, tarea_jornada_id: t.id, nucleo_id: n.id, propuesta_por_ia: 1, confirmado: 0 });
         propuestas.push({ tarea: t.nombre, nucleo: n.nombre, motivo: `tiene la habilidad "${t.habilidad_requerida}" registrada` });
         yaAsignados.add(n.id);
         faltan--;
@@ -314,18 +323,18 @@ export function proponerDistribucionJornada(jornadaId: number) {
     const disponibles = nucleos.filter((n) => !yaAsignados.has(n.id));
     for (const n of disponibles) {
       if (faltan <= 0) break;
-      insert("asignaciones_jornada", { jornada_id: jornadaId, tarea_jornada_id: t.id, nucleo_id: n.id, propuesta_por_ia: 1, confirmado: 0 });
+      await insert("asignaciones_jornada", { jornada_id: jornadaId, tarea_jornada_id: t.id, nucleo_id: n.id, propuesta_por_ia: 1, confirmado: 0 });
       propuestas.push({ tarea: t.nombre, nucleo: n.nombre, motivo: "disponible para la jornada, sin habilidad específica requerida" });
       yaAsignados.add(n.id);
       faltan--;
     }
-  });
+  }
 
   return propuestas;
 }
 
-export function historialProveedor(proveedorId: number) {
-  const compras = all<any>(
+export async function historialProveedor(proveedorId: number) {
+  const compras = await all<any>(
     `SELECT sc.material, dc.monto, dc.fecha, sc.id as solicitud_id
      FROM decisiones_compra dc
      JOIN presupuestos_proveedor pp ON pp.id = dc.presupuesto_id

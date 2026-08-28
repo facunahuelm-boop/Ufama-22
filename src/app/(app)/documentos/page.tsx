@@ -19,8 +19,10 @@ export default async function DocumentosPage() {
   if (!canRead(user.rol, "documentos")) redirect("/dashboard");
 
   const puedeEditar = canEdit(user.rol, "documentos");
-  const docs = all<any>(`SELECT d.*, u.nombre as subido_por FROM documentos d LEFT JOIN users u ON u.id = d.subido_por_id ORDER BY fecha DESC`);
-  const actas = all<any>(`SELECT * FROM actas ORDER BY fecha DESC`);
+  const [docs, actas] = await Promise.all([
+    all<any>(`SELECT d.*, u.nombre as subido_por FROM documentos d LEFT JOIN users u ON u.id = d.subido_por_id ORDER BY fecha DESC`),
+    all<any>(`SELECT * FROM actas ORDER BY fecha DESC`),
+  ]);
   const porCategoria = CATEGORIAS.map((c) => ({ c, docs: docs.filter((d) => d.categoria === c) })).filter((g) => g.docs.length > 0);
 
   return (

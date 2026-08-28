@@ -15,8 +15,8 @@ const money = (n: number) => `$${Math.round(n).toLocaleString("es-UY")}`;
 // ANTHROPIC_API_KEY, las mismas funciones de contexto se usan para dar
 // respuestas más flexibles generadas por el modelo (ver askClaude más abajo).
 
-function estadoObra(user: SessionUser): IaAnswer {
-  const tareas = tareasObraConSemaforo();
+async function estadoObra(user: SessionUser): Promise<IaAnswer> {
+  const tareas = await tareasObraConSemaforo();
   const total = tareas.length;
   const completadas = tareas.filter((t: any) => t.estado === "completada").length;
   const atrasadas = tareas.filter((t: any) => t.semaforo === "rojo" && t.estado !== "completada");
@@ -39,8 +39,9 @@ function estadoObra(user: SessionUser): IaAnswer {
   };
 }
 
-function tareasAtrasadas(): IaAnswer {
-  const tareas = tareasObraConSemaforo().filter((t: any) => t.semaforo === "rojo" && t.estado !== "completada");
+async function tareasAtrasadas(): Promise<IaAnswer> {
+  const todas = await tareasObraConSemaforo();
+  const tareas = todas.filter((t: any) => t.semaforo === "rojo" && t.estado !== "completada");
   if (tareas.length === 0) {
     return { answer: "No hay tareas atrasadas en este momento. 🟢", engine: "local", sources: [{ label: "Módulo Obra", detail: "Cronograma actual" }] };
   }
@@ -52,8 +53,8 @@ function tareasAtrasadas(): IaAnswer {
   };
 }
 
-function problemasAbiertos(): IaAnswer {
-  const problemas = all<any>(`SELECT p.*, t.nombre as tarea_nombre FROM problemas_obra p LEFT JOIN tareas_obra t ON t.id = p.tarea_id WHERE p.estado='abierto' ORDER BY p.severidad DESC`);
+async function problemasAbiertos(): Promise<IaAnswer> {
+  const problemas = await all<any>(`SELECT p.*, t.nombre as tarea_nombre FROM problemas_obra p LEFT JOIN tareas_obra t ON t.id = p.tarea_id WHERE p.estado='abierto' ORDER BY p.severidad DESC`);
   if (problemas.length === 0) {
     return { answer: "No hay problemas de obra abiertos registrados. 🟢", engine: "local", sources: [{ label: "Módulo Obra", detail: "Problemas de obra" }] };
   }
@@ -65,11 +66,11 @@ function problemasAbiertos(): IaAnswer {
   };
 }
 
-function quePasoConProveedor(pregunta: string): IaAnswer | null {
-  const proveedores = all<any>(`SELECT * FROM proveedores`);
+async function quePasoConProveedor(pregunta: string): Promise<IaAnswer | null> {
+  const proveedores = await all<any>(`SELECT * FROM proveedores`);
   const encontrado = proveedores.find((p) => pregunta.toLowerCase().includes(p.nombre.toLowerCase()));
   if (!encontrado) return null;
-  const compras = all<any>(
+  const compras = await all<any>(
     `SELECT sc.material, dc.monto, dc.fecha FROM decisiones_compra dc
      JOIN presupuestos_proveedor pp ON pp.id = dc.presupuesto_id
      JOIN solicitudes_compra sc ON sc.id = dc.solicitud_id
@@ -91,8 +92,8 @@ function quePasoConProveedor(pregunta: string): IaAnswer | null {
   };
 }
 
-function comprasPendientes(): IaAnswer {
-  const pendientes = all<any>(`SELECT * FROM solicitudes_compra WHERE estado IN ('pendiente_cotizacion','en_comparacion')`);
+async function comprasPendientes(): Promise<IaAnswer> {
+  const pendientes = await all<any>(`SELECT * FROM solicitudes_compra WHERE estado IN ('pendiente_cotizacion','en_comparacion')`);
   if (pendientes.length === 0) {
     return { answer: "No hay compras pendientes de decisión en este momento.", engine: "local", sources: [{ label: "Módulo Compras", detail: "Solicitudes de compra" }] };
   }
@@ -104,8 +105,8 @@ function comprasPendientes(): IaAnswer {
   };
 }
 
-function dineroDisponible(user: SessionUser): IaAnswer {
-  const fin = resumenFinanciero();
+async function dineroDisponible(user: SessionUser): Promise<IaAnswer> {
+  const fin = await resumenFinanciero();
   return {
     answer:
       `Saldo actual: ${money(fin.saldo)}. Pagos y compromisos ya asumidos: ${money(fin.comprometido)}. ` +
@@ -116,8 +117,8 @@ function dineroDisponible(user: SessionUser): IaAnswer {
   };
 }
 
-function documentosPorVencer(): IaAnswer {
-  const docs = all<any>(`SELECT * FROM documentos_seguridad WHERE fecha_vencimiento IS NOT NULL ORDER BY fecha_vencimiento ASC`);
+async function documentosPorVencer(): Promise<IaAnswer> {
+  const docs = await all<any>(`SELECT * FROM documentos_seguridad WHERE fecha_vencimiento IS NOT NULL ORDER BY fecha_vencimiento ASC`);
   const hoy = dayjs();
   const relevantes = docs.filter((d) => dayjs(d.fecha_vencimiento).diff(hoy, "day") <= 15);
   if (relevantes.length === 0) {
@@ -130,28 +131,31 @@ function documentosPorVencer(): IaAnswer {
   return { answer: `Documentos vencidos o próximos a vencer:\n${lineas.join("\n")}`, engine: "local", sources: [{ label: "Módulo Seguridad", detail: "Documentación con vencimiento" }] };
 }
 
-function queControlarEstaSemana(): IaAnswer {
-  const tareas = tareasObraConSemaforo().filter((t: any) => t.semaforo !== "verde" && t.estado !== "completada");
-  const alertas = all<any>(`SELECT * FROM alertas WHERE estado='abierta' AND severidad IN ('critica','importante') ORDER BY severidad ASC`);
+async function queControlarEstaSemana(): Promise<IaAnswer> {
+  const [todasTareas, alertas, proximaJornada] = await Promise.all([
+    tareasObraConSemaforo(),
+    all<any>(`SELECT * FROM alertas WHERE estado='abierta' AND severidad IN ('critica','importante') ORDER BY severidad ASC`),
+    get<any>(`SELECT * FROM jornadas_trabajo WHERE fecha >= CURRENT_DATE::text ORDER BY fecha ASC LIMIT 1`),
+  ]);
+  const tareas = todasTareas.filter((t: any) => t.semaforo !== "verde" && t.estado !== "completada");
   const partes: string[] = [];
   if (tareas.length > 0) partes.push(`${tareas.length} tarea(s) de obra en amarillo o rojo: ${tareas.map((t: any) => t.nombre).join(", ")}.`);
   if (alertas.length > 0) partes.push(`${alertas.length} alerta(s) críticas o importantes abiertas.`);
-  const proximaJornada = get<any>(`SELECT * FROM jornadas_trabajo WHERE fecha >= date('now') ORDER BY fecha ASC LIMIT 1`);
   if (proximaJornada) partes.push(`Próxima jornada de ayuda mutua: ${dayjs(proximaJornada.fecha).format("dddd DD/MM")}.`);
   if (partes.length === 0) return { answer: "Esta semana no hay puntos críticos pendientes según lo cargado en el sistema. 🟢", engine: "local", sources: [{ label: "Dashboard", detail: "Estado consolidado" }] };
   return { answer: `Para esta semana conviene priorizar:\n${partes.map((p) => `• ${p}`).join("\n")}`, engine: "local", sources: [{ label: "Dashboard", detail: "Obra, alertas y trabajo combinados" }] };
 }
 
-function comparacionCompra(pregunta: string): IaAnswer | null {
-  const solicitudes = all<any>(`SELECT * FROM solicitudes_compra`);
+async function comparacionCompra(pregunta: string): Promise<IaAnswer | null> {
+  const solicitudes = await all<any>(`SELECT * FROM solicitudes_compra`);
   const match = solicitudes.find((s) => pregunta.toLowerCase().includes(s.material.toLowerCase()));
   if (!match) return null;
-  const cmp = compararPresupuestos(match.id);
+  const cmp = await compararPresupuestos(match.id);
   return { answer: cmp.texto, engine: "local", sources: [{ label: "Módulo Compras", detail: `Solicitud #${match.id} — ${match.material}` }] };
 }
 
-function actasYDecisiones(pregunta: string): IaAnswer | null {
-  const actas = all<any>(`SELECT * FROM actas ORDER BY fecha DESC`);
+async function actasYDecisiones(pregunta: string): Promise<IaAnswer | null> {
+  const actas = await all<any>(`SELECT * FROM actas ORDER BY fecha DESC`);
   if (actas.length === 0) return null;
   const lower = pregunta.toLowerCase();
   const match = actas.find((a) => lower.includes(a.titulo.toLowerCase().split(" ")[0]) || lower.includes("acta") || lower.includes("asamblea") || lower.includes("resolv"));
@@ -163,7 +167,7 @@ function actasYDecisiones(pregunta: string): IaAnswer | null {
   };
 }
 
-const HANDLERS: { test: (q: string) => boolean; run: (q: string, u: SessionUser) => IaAnswer | null }[] = [
+const HANDLERS: { test: (q: string) => boolean; run: (q: string, u: SessionUser) => Promise<IaAnswer | null> }[] = [
   { test: (q) => /c[oó]mo (viene|va|est[aá]) la (obra|construcci[oó]n)/.test(q), run: (q, u) => estadoObra(u) },
   { test: (q) => /atrasad/.test(q) && /tarea/.test(q), run: () => tareasAtrasadas() },
   { test: (q) => /problema/.test(q) && /abiert/.test(q), run: () => problemasAbiertos() },
@@ -176,11 +180,11 @@ const HANDLERS: { test: (q: string) => boolean; run: (q: string, u: SessionUser)
   { test: (q) => /acta|asamblea|resolv/.test(q), run: (q) => actasYDecisiones(q) },
 ];
 
-export function askLocal(pregunta: string, user: SessionUser): IaAnswer {
+export async function askLocal(pregunta: string, user: SessionUser): Promise<IaAnswer> {
   const q = pregunta.toLowerCase().trim();
   for (const h of HANDLERS) {
     if (h.test(q)) {
-      const res = h.run(q, user);
+      const res = await h.run(q, user);
       if (res) return res;
     }
   }
@@ -200,11 +204,19 @@ export async function askClaude(pregunta: string, user: SessionUser): Promise<Ia
 
   // Contexto acotado por permisos del usuario (RAG simplificado: se arma con
   // las mismas funciones de consulta que usa el motor local).
+  const [obra, finanzas, comprasPendientesCtx, alertas] = await Promise.all([
+    canRead(user.rol, "obra") ? tareasObraConSemaforo() : Promise.resolve(null),
+    canRead(user.rol, "finanzas") ? resumenFinanciero() : Promise.resolve(null),
+    canRead(user.rol, "compras")
+      ? all(`SELECT * FROM solicitudes_compra WHERE estado IN ('pendiente_cotizacion','en_comparacion')`)
+      : Promise.resolve(null),
+    all(`SELECT * FROM alertas WHERE estado='abierta' ORDER BY severidad ASC LIMIT 20`),
+  ]);
   const contexto = {
-    obra: canRead(user.rol, "obra") ? tareasObraConSemaforo().slice(0, 30) : null,
-    finanzas: canRead(user.rol, "finanzas") ? resumenFinanciero() : null,
-    comprasPendientes: canRead(user.rol, "compras") ? all(`SELECT * FROM solicitudes_compra WHERE estado IN ('pendiente_cotizacion','en_comparacion')`) : null,
-    alertas: all(`SELECT * FROM alertas WHERE estado='abierta' ORDER BY severidad ASC LIMIT 20`),
+    obra: obra ? obra.slice(0, 30) : null,
+    finanzas,
+    comprasPendientes: comprasPendientesCtx,
+    alertas,
   };
 
   try {
